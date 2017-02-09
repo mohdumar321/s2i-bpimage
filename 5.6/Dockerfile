@@ -1,29 +1,44 @@
-FROM centos/s2i-base-centos7
+FFROM ubuntu:16.04
+MAINTAINER Steven Mirabito <smirabito@csh.rit.edu>
 
-# This image provides an Apache+PHP environment for running PHP
-# applications.
+LABEL \
+      # Location of the STI scripts inside the image.
+      io.openshift.s2i.scripts-url=image:///usr/libexec/s2i
 
-MAINTAINER SoftwareCollections.org <sclorg@redhat.com>
+ENV \
+    # Path to be used in other layers to place s2i scripts into
+    STI_SCRIPTS_PATH=/usr/libexec/s2i \
+    # The $HOME is not set by default, but some applications needs this variable
+    HOME=/opt/app-root/src \
+    PATH=/opt/app-root/src/bin:/opt/app-root/bin:$PATH
+# Surpress Upstart errors/warning
+RUN dpkg-divert --local --rename --add /sbin/initctl
+RUN ln -sf /bin/true /sbin/initctl
 
-EXPOSE 8080
+# Let the conatiner know that there is no tty
+ENV DEBIAN_FRONTEND noninteractive
 
-ENV PHP_VERSION=5.6 \
-    PATH=$PATH:/opt/rh/rh-php56/root/usr/bin
+# Update base image
+# Add sources for latest nginx
+# Install software requirements
 
-LABEL io.k8s.description="Platform for building and running PHP 5.6 applications" \
-      io.k8s.display-name="Apache 2.4 with PHP 5.6" \
-      io.openshift.expose-services="8080:http" \
-      io.openshift.tags="builder,php,php56,rh-php56"
-
-# Install Apache httpd and PHP
-RUN yum install -y centos-release-scl && \
-    INSTALL_PKGS="rh-php56 rh-php56-php rh-php56-php-mysqlnd rh-php56-php-pgsql rh-php56-php-bcmath \
-                  rh-php56-php-gd rh-php56-php-intl rh-php56-php-ldap rh-php56-php-mbstring rh-php56-php-pdo \
-                  rh-php56-php-pecl-memcache rh-php56-php-process rh-php56-php-soap rh-php56-php-opcache rh-php56-php-xml \
-                  rh-php56-php-pecl-xdebug rh-php56-php-gmp" && \
-    yum install -y --setopt=tsflags=nodocs --enablerepo=centosplus $INSTALL_PKGS && \
-    rpm -V $INSTALL_PKGS && \
-    yum clean all -y
+RUN apt-get update && \
+apt-get install -y unzip && \
+apt-getinstall -y software-properties-common && \
+nginx=stable && \
+add-apt-repository ppa:nginx/$nginx && \
+apt-get update && \
+apt-get upgrade -y && \
+BUILD_PACKAGES="supervisor nginx libaio-dev php5-dev php5-fpm git php5-mysql php-apc php5-curl php5-gd php5-intl php5-mcrypt php5-memcache php5-sqlite php5-tidy php5-xmlrpc php5-xsl php5-pgsql php5-mongo php5-ldap pwgen" && \
+apt-get -y install $BUILD_PACKAGES && \
+apt-get remove --purge -y software-properties-common && \
+apt-get autoremove -y && \
+apt-get clean && \
+apt-get autoclean && \
+echo -n > /var/lib/apt/extended_states && \
+rm -rf /var/lib/apt/lists/* && \
+rm -rf /usr/share/man/?? && \
+rm -rf /usr/share/man/??_*
 
 # Copy the S2I scripts from the specific language image to $STI_SCRIPTS_PATH
 COPY ./s2i/bin/ $STI_SCRIPTS_PATH
